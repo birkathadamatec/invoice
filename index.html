@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>העלאת קבלות</title>
+  <style>
+    body { font-family: Arial, sans-serif; background:#f6f7f9; margin:0; padding:24px; }
+    .card { max-width: 820px; margin: 0 auto; background:#fff; border-radius:14px; padding:20px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+    h1 { margin:0 0 16px; font-size:22px; }
+    label { display:block; margin:14px 0 6px; font-weight:700; }
+    input[type="text"], input[type="number"] {
+      width:100%; padding:12px; border:1px solid #d7dbe2; border-radius:10px; font-size:16px;
+    }
+    .row { display:flex; gap:10px; align-items:end; }
+    .row > div { flex:1; }
+    button {
+      padding:12px 14px; border:0; border-radius:10px; cursor:pointer; font-weight:700; font-size:15px;
+    }
+    .btn { background:#2563eb; color:#fff; }
+    .btn:disabled { opacity:0.6; cursor:not-allowed; }
+    .btn-secondary { background:#111827; color:#fff; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; font-size:13px; font-weight:700; }
+    .pill-ok { background:#dcfce7; color:#14532d; }
+    .pill-bad { background:#fee2e2; color:#7f1d1d; }
+    .muted { color:#6b7280; font-size:13px; margin-top:6px; }
+    .box { background:#f9fafb; border:1px dashed #cbd5e1; padding:12px; border-radius:12px; margin-top:10px; }
+    .preview { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .preview img { width:140px; height:140px; object-fit:cover; border-radius:12px; border:1px solid #e5e7eb; }
+    .status { margin-top:14px; padding:10px 12px; border-radius:12px; display:none; }
+    .status.ok { background:#dcfce7; color:#14532d; display:block; }
+    .status.bad { background:#fee2e2; color:#7f1d1d; display:block; }
+    .small { font-size:12px; color:#374151; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>טופס העלאת קבלות</h1>
+
+    <form id="receiptForm">
+      <div class="row">
+        <div>
+          <label for="hp">ח.פ / מספר חברה (שהנפיקה את הקבלה)</label>
+          <input id="hp" name="hp" type="text" inputmode="numeric" placeholder="לדוגמה: 512345678" required />
+          <div class="muted">הקלד מספר ואז לחץ “חיפוש” כדי למשוך שם חברה + נתונים נוספים מהאינדקס.</div>
+        </div>
+        <div style="flex:0 0 140px;">
+          <button id="btnLookup" class="btn" type="button">חיפוש</button>
+        </div>
+      </div>
+
+      <div class="box" id="lookupBox">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <div><strong>סטטוס חיפוש:</strong> <span id="lookupStatus" class="pill">לא בוצע</span></div>
+          <div><strong>שם חברה:</strong> <span id="companyName">—</span></div>
+        </div>
+        <div class="muted">
+          <span class="small">מס׳ חברה אצלך בפלטפורמה:</span> <strong id="platformCompanyId">—</strong>
+          &nbsp;|&nbsp;
+          <span class="small">Prompt (עמודה D):</span> <strong id="promptPreview">—</strong>
+        </div>
+      </div>
+
+      <label for="totalAmount">סכום סה״כ כולל מע״מ</label>
+      <input id="totalAmount" name="totalAmount" type="number" step="0.01" min="0" placeholder="לדוגמה: 1234.50" required />
+
+      <label for="images">תמונות קבלה (אפשר כמה תמונות)</label>
+      <input id="images" name="images" type="file" accept="image/*" multiple required />
+      <div class="preview" id="preview"></div>
+
+      <div class="row" style="margin-top:16px;">
+        <div>
+          <button id="btnSubmit" class="btn-secondary" type="submit">שליחה לוובהוק</button>
+          <div class="muted">השליחה תשלח את כל הנתונים + התמונות כבינארי (multipart/form-data).</div>
+        </div>
+      </div>
+
+      <div id="statusBox" class="status"></div>
+
+      <!-- Hidden fields that will be filled by lookup -->
+      <input type="hidden" id="companyNameHidden" name="companyNameHidden" />
+      <input type="hidden" id="platformCompanyIdHidden" name="platformCompanyIdHidden" />
+      <input type="hidden" id="promptHidden" name="promptHidden" />
+    </form>
+  </div>
+
+<script>
+  // ====== CONFIG ======
+  const WEBHOOK_URL = "https://hook.integrator.boost.space/dv1i9przlbd2qr1vsd6v8vaj59kk1b1h";
+  const APPS_SCRIPT_LOOKUP_URL = "https://script.google.com/macros/s/AKfycbzh9KPIMMX76GpwuUgv3yXNfsgWpYuS1YC3FA1TglYzvVZqZkqQ5KmedS7GiPlmQR2E4g/exec"; // <-- הדבק כאן את ה-URL של ה-Web App
+  // דוגמה: https://script.google.com/macros/s/AKfycbxxxxxxx/exec
+
+  // ====== UI helpers ======
+  const el = (id) => document.getElementById(id);
+
+  function setLookupPill(kind, text) {
+    const s = el("lookupStatus");
+    s.className = "pill " + (kind === "ok" ? "pill-ok" : kind === "bad" ? "pill-bad" : "");
+    s.textContent = text;
+  }
+
+  function setStatus(kind, msg) {
+    const box = el("statusBox");
+    box.className = "status " + (kind === "ok" ? "ok" : "bad");
+    box.textContent = msg;
+  }
+
+  function clearStatus() {
+    const box = el("statusBox");
+    box.className = "status";
+    box.style.display = "none";
+    box.textContent = "";
+  }
+
+  function showStatusBox() {
+    el("statusBox").style.display = "block";
+  }
+
+  // ====== Image preview ======
+  el("images").addEventListener("change", () => {
+    const wrap = el("preview");
+    wrap.innerHTML = "";
+    const files = el("images").files;
+    for (const f of files) {
+      const img = document.createElement("img");
+      img.alt = f.name;
+      img.src = URL.createObjectURL(f);
+      wrap.appendChild(img);
+    }
+  });
+
+  // ====== Lookup ======
+  el("btnLookup").addEventListener("click", async () => {
+    clearStatus();
+
+    const hp = el("hp").value.trim();
+    if (!hp) {
+      showStatusBox(); setStatus("bad", "חייב להכניס ח.פ לפני חיפוש.");
+      return;
+    }
+
+    if (!APPS_SCRIPT_LOOKUP_URL || APPS_SCRIPT_LOOKUP_URL.includes("YOUR_APPS_SCRIPT_WEBAPP_URL")) {
+      showStatusBox(); setStatus("bad", "לא הוגדר APPS_SCRIPT_LOOKUP_URL. הדבק את כתובת ה-Web App בקוד.");
+      return;
+    }
+
+    el("btnLookup").disabled = true;
+    setLookupPill("neutral", "מחפש...");
+
+    try {
+      const url = new URL(APPS_SCRIPT_LOOKUP_URL);
+      url.searchParams.set("hp", hp);
+
+      const res = await fetch(url.toString(), { method: "GET" });
+      if (!res.ok) throw new Error("Lookup HTTP " + res.status);
+
+      const data = await res.json();
+
+      if (data.found) {
+        setLookupPill("ok", "נמצא");
+        el("companyName").textContent = data.companyName || "—";
+        el("platformCompanyId").textContent = data.platformCompanyId || "—";
+        el("promptPreview").textContent = (data.prompt || "—").slice(0, 120);
+
+        // hidden fields for submit
+        el("companyNameHidden").value = data.companyName || "";
+        el("platformCompanyIdHidden").value = data.platformCompanyId || "";
+        el("promptHidden").value = data.prompt || "";
+      } else {
+        setLookupPill("bad", "לא נמצא");
+        el("companyName").textContent = "—";
+        el("platformCompanyId").textContent = "—";
+        el("promptPreview").textContent = "—";
+
+        el("companyNameHidden").value = "";
+        el("platformCompanyIdHidden").value = "";
+        el("promptHidden").value = "";
+
+        showStatusBox(); setStatus("bad", data.message || "מספר לא קיים");
+      }
+    } catch (err) {
+      console.error(err);
+      setLookupPill("bad", "שגיאה");
+      showStatusBox(); setStatus("bad", "שגיאה בחיפוש. אם זה קורס/הרשאות, ודא שה-Apps Script מפורסם כ-Web App ל-Anyone.");
+    } finally {
+      el("btnLookup").disabled = false;
+    }
+  });
+
+  // ====== Submit to webhook ======
+  el("receiptForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearStatus();
+
+    const hp = el("hp").value.trim();
+    const totalAmount = el("totalAmount").value;
+    const files = el("images").files;
+
+    if (!hp || !totalAmount || !files || files.length === 0) {
+      showStatusBox(); setStatus("bad", "חובה למלא ח.פ, סכום, ולצרף לפחות תמונה אחת.");
+      return;
+    }
+
+    // לא ממליץ לאפשר שליחה בלי Lookup, כי אז תקבל נתונים חסרים/שגויים.
+    if (!el("companyNameHidden").value) {
+      showStatusBox(); setStatus("bad", "לא בוצע חיפוש תקין לח.פ (או לא נמצא). קודם חפש ואז שלח.");
+      return;
+    }
+
+    el("btnSubmit").disabled = true;
+    showStatusBox(); setStatus("ok", "שולח...");
+
+    try {
+      const fd = new FormData();
+
+      // טקסטים/שדות
+      fd.append("hp", hp);
+      fd.append("companyName", el("companyNameHidden").value);
+      fd.append("platformCompanyId", el("platformCompanyIdHidden").value);
+      fd.append("prompt", el("promptHidden").value);
+      fd.append("totalAmount", totalAmount);
+
+      // אפשר להוסיף מזהה ייחודי
+      fd.append("clientTimestamp", new Date().toISOString());
+
+      // תמונות כבינארי (multipart)
+      for (let i = 0; i < files.length; i++) {
+        fd.append("images", files[i], files[i].name); // אותו key "images" לכל התמונות
+      }
+
+      const res = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        body: fd
+      });
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error("Webhook HTTP " + res.status + " " + text);
+      }
+
+      setStatus("ok", "נשלח בהצלחה ✅");
+      // איפוס חלקי (לא מוחק lookup כדי שתראה מה נשלח)
+      el("totalAmount").value = "";
+      el("images").value = "";
+      el("preview").innerHTML = "";
+    } catch (err) {
+      console.error(err);
+      setStatus("bad", "שליחה נכשלה: " + (err.message || err));
+    } finally {
+      el("btnSubmit").disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
