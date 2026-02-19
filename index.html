@@ -31,12 +31,8 @@
       padding:26px 14px 60px;
     }
     .wrap{ max-width: 900px; margin:0 auto; }
-    .top{
-      display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:14px;
-    }
-    .brand{
-      display:flex; gap:12px; align-items:center;
-    }
+    .top{ display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:14px; }
+    .brand{ display:flex; gap:12px; align-items:center; }
     .logo{
       width:44px; height:44px; border-radius:14px;
       background: linear-gradient(135deg, rgba(37,99,235,1), rgba(99,102,241,1));
@@ -44,7 +40,6 @@
     }
     h1{ margin:0; font-size:20px; letter-spacing:-.2px;}
     .sub{ color:var(--muted); font-size:13px; margin-top:2px; }
-
     .card{
       background:var(--card);
       border:1px solid rgba(15,23,42,.08);
@@ -58,7 +53,6 @@
       background: linear-gradient(180deg, rgba(248,250,252,1), rgba(255,255,255,1));
     }
     .cardBody{ padding:18px; }
-
     .grid{
       display:grid;
       grid-template-columns: 1.3fr .7fr;
@@ -68,7 +62,6 @@
       .grid{ grid-template-columns: 1fr; }
       .top{ flex-direction:column; align-items:flex-start; }
     }
-
     label{ display:block; font-weight:700; font-size:13px; margin:12px 0 7px; }
     .hint{ color:var(--muted); font-size:12px; margin-top:6px; line-height:1.35; }
     input[type="text"], input[type="number"]{
@@ -86,7 +79,6 @@
       box-shadow: 0 0 0 4px rgba(37,99,235,.12);
       background:#fff;
     }
-
     .rowBtns{ display:flex; gap:10px; align-items:stretch; }
     .btn{
       border:0;
@@ -142,10 +134,8 @@
     .kv{ display:grid; gap:4px; }
     .kv .k{ color:var(--muted); font-size:11px; font-weight:800; }
     .kv .v{ font-size:14px; font-weight:900; }
-
     .divider{ height:1px; background:var(--line); margin:14px 0; }
 
-    /* Images */
     .drop{
       margin-top:8px;
       border:1px dashed rgba(15,23,42,.18);
@@ -206,6 +196,7 @@
       font-weight:800;
       font-size:13px;
       line-height:1.35;
+      white-space:pre-wrap;
     }
     .status.ok{ display:block; background: rgba(22,163,74,.10); border-color: rgba(22,163,74,.22); color: #14532d; }
     .status.bad{ display:block; background: rgba(239,68,68,.10); border-color: rgba(239,68,68,.22); color: #7f1d1d; }
@@ -214,7 +205,6 @@
       display:flex; gap:10px; align-items:center; justify-content:flex-start; flex-wrap:wrap;
       margin-top:14px;
     }
-
     .tiny{ font-size:11px; color: var(--muted); margin-top:8px; }
   </style>
 </head>
@@ -226,7 +216,7 @@
         <div class="logo"></div>
         <div>
           <h1>העלאת קבלות</h1>
-          <div class="sub">חיפוש חברה באינדקס + העלאת תמונות + שליחה לוובהוק</div>
+          <div class="sub">חיפוש חברה באינדקס + העלאת תמונות + שליחה לוובהוק (Base64)</div>
         </div>
       </div>
     </div>
@@ -279,18 +269,18 @@
                 <div class="dropTop">
                   <div>
                     <div class="dropTitle">הוסף תמונות (אפשר כמה)</div>
-                    <div class="dropHint">לא ידרוס תמונות קיימות — כל בחירה פשוט מצטרפת.</div>
+                    <div class="dropHint">הבחירה מצטרפת לקיים. בשליחה נשלח כ-Base64 בתוך JSON.</div>
                   </div>
                   <div class="footerBtns" style="margin-top:0;">
                     <button id="btnAddImages" type="button" class="btn btnSoft">הוסף תמונות</button>
                   </div>
                 </div>
 
-                <!-- file input hidden -->
                 <input id="images" type="file" accept="image/*" multiple style="display:none" />
 
                 <div class="preview" id="preview"></div>
                 <div class="tiny" id="imgCount">0 תמונות נבחרו</div>
+                <div class="tiny" id="sizeNote"></div>
               </div>
 
               <div id="statusBox" class="status"></div>
@@ -300,14 +290,13 @@
               <button id="btnSubmit" class="btn btnDark" type="submit" style="width:100%; padding:13px 14px;">
                 שליחה לוובהוק
               </button>
-              <div class="hint">נשלח כ־multipart/form-data (התמונות כבינארי).</div>
+              <div class="hint">הבקשה נשלחת כ-JSON. התמונות יופיעו בשדה imagesBase64[]</div>
             </div>
           </div>
 
-          <!-- Hidden fields filled by lookup -->
-          <input type="hidden" id="companyNameHidden" name="companyNameHidden" />
-          <input type="hidden" id="platformCompanyIdHidden" name="platformCompanyIdHidden" />
-          <input type="hidden" id="promptHidden" name="promptHidden" />
+          <input type="hidden" id="companyNameHidden" />
+          <input type="hidden" id="platformCompanyIdHidden" />
+          <input type="hidden" id="promptHidden" />
         </form>
       </div>
     </div>
@@ -318,7 +307,9 @@
   const WEBHOOK_URL = "https://hook.integrator.boost.space/dv1i9przlbd2qr1vsd6v8vaj59kk1b1h";
   const APPS_SCRIPT_LOOKUP_URL = "https://script.google.com/macros/s/AKfycbzh9KPIMMX76GpwuUgv3yXNfsgWpYuS1YC3FA1TglYzvVZqZkqQ5KmedS7GiPlmQR2E4g/exec";
 
-  // ====== Helpers ======
+  // Base64 מגדיל גודל בערך ~33%, אז שים גבול שפוי כדי לא להיתקע על payload ענק.
+  const MAX_TOTAL_BYTES = 8 * 1024 * 1024; // 8MB לפני Base64 (בערך). תוכל לשנות.
+
   const el = (id) => document.getElementById(id);
 
   function setLookup(kind, text){
@@ -346,13 +337,13 @@
     return s.length > n ? s.slice(0, n-1) + "…" : s;
   }
 
-  // ====== Images: keep selections across multiple picks ======
-  // הבעיה אצלך קרתה כי <input type="file"> תמיד "מחליף" את הבחירה הקודמת.
-  // הפתרון: מנהלים מערך Files משלנו, ובכל בחירה מוסיפים אליו.
+  // ====== Images selection (no override) ======
   let selectedFiles = []; // Array<File>
 
   function syncUI(){
     el("imgCount").textContent = `${selectedFiles.length} תמונות נבחרו`;
+    const total = selectedFiles.reduce((sum,f)=>sum + (f.size||0),0);
+    el("sizeNote").textContent = `סה״כ משוער: ${(total/1024/1024).toFixed(2)}MB לפני Base64 (אחרי Base64 זה יגדל).`;
     renderPreview();
   }
 
@@ -384,7 +375,6 @@
 
   function addFiles(fileList){
     const incoming = Array.from(fileList || []);
-    // סינון כפילויות לפי name+size+lastModified (מספיק טוב)
     const seen = new Set(selectedFiles.map(f => `${f.name}|${f.size}|${f.lastModified}`));
     for (const f of incoming){
       const key = `${f.name}|${f.size}|${f.lastModified}`;
@@ -399,9 +389,18 @@
   el("btnAddImages").addEventListener("click", () => el("images").click());
   el("images").addEventListener("change", (e) => {
     addFiles(e.target.files);
-    // חשוב: לאפס את ה-input כדי שאפשר יהיה לבחור שוב את אותה תמונה אם רוצים
-    e.target.value = "";
+    e.target.value = ""; // allow selecting same file again
   });
+
+  // ====== Convert File -> data URL base64 ======
+  function fileToDataURL(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error("FileReader error for " + file.name));
+      reader.onload = () => resolve(reader.result); // data:image/...;base64,....
+      reader.readAsDataURL(file);
+    });
+  }
 
   // ====== Lookup ======
   el("btnLookup").addEventListener("click", async () => {
@@ -456,7 +455,7 @@
     }
   });
 
-  // ====== Submit ======
+  // ====== Submit JSON with Base64 images ======
   el("receiptForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     clearStatus();
@@ -477,25 +476,45 @@
       return;
     }
 
+    // גודל כולל לפני Base64 (רק מנגנון הגנה)
+    const totalBytes = selectedFiles.reduce((sum,f)=>sum + (f.size||0),0);
+    if (totalBytes > MAX_TOTAL_BYTES){
+      setStatus(
+        "bad",
+        `הקבצים גדולים מדי לשליחה כ-Base64.\n` +
+        `סה״כ: ${(totalBytes/1024/1024).toFixed(2)}MB (הגבלה: ${(MAX_TOTAL_BYTES/1024/1024).toFixed(2)}MB).\n` +
+        `פתרון: להקטין תמונות או לעבור לשילוח בינארי/קישורים.`
+      );
+      return;
+    }
+
     el("btnSubmit").disabled = true;
-    setStatus("ok", "שולח...");
+    setStatus("ok", "ממיר תמונות ל-Base64 ושולח...");
 
     try{
-      const fd = new FormData();
+      // ממיר את כל התמונות ל-data URL (base64)
+      const imagesBase64 = [];
+      for (const f of selectedFiles){
+        const dataUrl = await fileToDataURL(f); // data:image/...;base64,...
+        imagesBase64.push(dataUrl);
+      }
 
-      fd.append("hp", hp);
-      fd.append("companyName", el("companyNameHidden").value);
-      fd.append("platformCompanyId", el("platformCompanyIdHidden").value);
-      fd.append("prompt", el("promptHidden").value);
-      fd.append("totalAmount", totalAmount);
-      fd.append("clientTimestamp", new Date().toISOString());
+      const payload = {
+        hp,
+        companyName: el("companyNameHidden").value,
+        platformCompanyId: el("platformCompanyIdHidden").value,
+        prompt: el("promptHidden").value,
+        totalAmount: totalAmount,
+        clientTimestamp: new Date().toISOString(),
+        imagesBase64
+      };
 
-      // התמונות כבינארי
-      selectedFiles.forEach((file) => {
-        fd.append("images", file, file.name);
+      const res = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
       });
 
-      const res = await fetch(WEBHOOK_URL, { method:"POST", body: fd });
       if (!res.ok){
         const text = await res.text().catch(() => "");
         throw new Error("Webhook HTTP " + res.status + (text ? " | " + text : ""));
@@ -503,7 +522,7 @@
 
       setStatus("ok", "נשלח בהצלחה ✅");
 
-      // איפוס אחרי שליחה
+      // reset
       el("totalAmount").value = "";
       selectedFiles = [];
       syncUI();
